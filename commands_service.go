@@ -42,13 +42,16 @@ func preloadServiceFunc(c *service.Config) (CobraCommandFuncE, func(FMonServiceF
 
 	var svc service.Service
 	var prerunE = func(cmd *cobra.Command, args []string) (err error) {
-		var w = &watcher.Watcher{}
 		targetExePath, err := ServiceExecutable()
 		if err != nil {
 			return err
 		}
 
 		c.Executable = targetExePath
+
+		var w = watcher.NewWatcher(
+			filepath.Dir(c.Executable),
+		)
 		svc, err = service.New(w, c)
 		if err != nil {
 			return err
@@ -87,7 +90,7 @@ func preloadServiceFunc(c *service.Config) (CobraCommandFuncE, func(FMonServiceF
 	return prerunE, exec
 }
 
-func cobraServiceInstall(svc service.Service, cnf service.Config, cmd *cobra.Command, args []string) error {
+func commandServiceInstall(svc service.Service, cnf service.Config, cmd *cobra.Command, args []string) error {
 	status, err := svc.Status()
 	if err != nil && !errors.Is(err, service.ErrNotInstalled) {
 		return fmt.Errorf(
@@ -132,20 +135,24 @@ func cobraServiceInstall(svc service.Service, cnf service.Config, cmd *cobra.Com
 	return svc.Install()
 }
 
-func cobraServiceUninstall(svc service.Service, cnf service.Config, cmd *cobra.Command, args []string) error {
+func commandServiceUninstall(svc service.Service, cnf service.Config, cmd *cobra.Command, args []string) error {
 	colRed.Printf("Uninstalling service %q\n", svc.String())
 	return svc.Uninstall()
 }
 
-func cobraServiceStart(svc service.Service, cnf service.Config, cmd *cobra.Command, args []string) error {
+func commandServiceStart(svc service.Service, cnf service.Config, cmd *cobra.Command, args []string) error {
 	return svc.Start()
 }
 
-func cobraServiceStop(svc service.Service, cnf service.Config, cmd *cobra.Command, args []string) error {
+func commandServiceRun(svc service.Service, cnf service.Config, cmd *cobra.Command, args []string) error {
+	return svc.Run()
+}
+
+func commandServiceStop(svc service.Service, cnf service.Config, cmd *cobra.Command, args []string) error {
 	return svc.Stop()
 }
 
-func cobraServiceStatus(svc service.Service, cnf service.Config, cmd *cobra.Command, args []string) error {
+func commandServiceStatus(svc service.Service, cnf service.Config, cmd *cobra.Command, args []string) error {
 	var status, err = svc.Status()
 	var serviceNotInstalled = errors.Is(err, service.ErrNotInstalled)
 	if err != nil && !errors.Is(err, service.ErrNotInstalled) {

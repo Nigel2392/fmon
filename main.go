@@ -3,8 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"path/filepath"
-	"strings"
 
 	"github.com/Nigel2392/fmon/logo"
 	"github.com/Nigel2392/fmon/watcher/configure"
@@ -17,13 +15,18 @@ const (
 	NAME_SHORT = "fmon"
 )
 
+var SERVICE_CONFIG = &service.Config{
+	Name:        NAME_SHORT,
+	DisplayName: "FMon Watcher Service",
+	Description: "Service keeps track of configuration changes and watches the configured directories.",
+	Arguments:   []string{"service", "run"},
+}
+
 func main() {
 	var wd, err = os.Getwd()
 	if err != nil {
 		panic("could not retrieve working directory")
 	}
-
-	logo.Print()
 
 	RUNTIME.CurrentDir = wd
 	configure.Setup(configure.PackageSetup{
@@ -36,8 +39,11 @@ func main() {
 		--------------------
 	*/
 	var root = &cobra.Command{
-		Use:  "filesystem-monitor",
-		Args: cobra.ArbitraryArgs,
+		Use:           NAME,
+		Args:          cobra.ArbitraryArgs,
+		PreRun:        printLogo,
+		SilenceUsage:  true,
+		SilenceErrors: true,
 	}
 
 	/*
@@ -46,55 +52,50 @@ func main() {
 		--------------------
 	*/
 	var preRun, changeService = preloadServiceFunc(
-		&service.Config{
-			Name:        "FMon",
-			DisplayName: "FMon Watcher Service",
-		},
+		SERVICE_CONFIG,
 	)
 
 	var cobraService = &cobra.Command{
 		Use:               "service",
 		Short:             "Manage the service",
 		PersistentPreRunE: preRun,
-		SilenceUsage:      true,
-		SilenceErrors:     true,
 	}
 
 	var (
 		cobraServiceInstall = &cobra.Command{
-			Use:           "install",
-			Short:         "Install the service",
-			RunE:          changeService(cobraServiceInstall),
-			SilenceUsage:  true,
-			SilenceErrors: true,
+			Use:    "install",
+			Short:  "Install the service",
+			PreRun: printLogo,
+			RunE:   changeService(commandServiceInstall),
 		}
 		cobraServiceUninstall = &cobra.Command{
-			Use:           "uninstall",
-			Short:         "Uninstall the service",
-			RunE:          changeService(cobraServiceUninstall),
-			SilenceUsage:  true,
-			SilenceErrors: true,
+			Use:    "uninstall",
+			Short:  "Uninstall the service",
+			PreRun: printLogo,
+			RunE:   changeService(commandServiceUninstall),
 		}
 		cobraServiceStart = &cobra.Command{
-			Use:           "start",
-			Short:         "Start the service",
-			RunE:          changeService(cobraServiceStart),
-			SilenceUsage:  true,
-			SilenceErrors: true,
+			Use:    "start",
+			Short:  "Start the service",
+			PreRun: printLogo,
+			RunE:   changeService(commandServiceStart),
+		}
+		cobraServiceRun = &cobra.Command{
+			Use:   "run",
+			Short: "Run the service in interactive mode",
+			RunE:  changeService(commandServiceRun),
 		}
 		cobraServiceStop = &cobra.Command{
-			Use:           "stop",
-			Short:         "Stop the service",
-			RunE:          changeService(cobraServiceStop),
-			SilenceUsage:  true,
-			SilenceErrors: true,
+			Use:    "stop",
+			Short:  "Stop the service",
+			PreRun: printLogo,
+			RunE:   changeService(commandServiceStop),
 		}
 		cobraServiceStatus = &cobra.Command{
-			Use:           "status",
-			Short:         "Retrieve the service status",
-			RunE:          changeService(cobraServiceStatus),
-			SilenceUsage:  true,
-			SilenceErrors: true,
+			Use:    "status",
+			Short:  "Retrieve the service status",
+			PreRun: printLogo,
+			RunE:   changeService(commandServiceStatus),
 		}
 	)
 
@@ -111,34 +112,37 @@ func main() {
 		Aliases: []string{
 			"w", "watch", ".",
 		},
-		PersistentPreRun: preloadConfig,
+		PersistentPreRun: commandChain(
+			printLogo,
+			preloadConfig,
+		),
 	}
 
 	var (
 		cobraWatcherAdd = &cobra.Command{
-			Use: "add",
-			Run: changeConfig(commandWatchDir),
+			Use:  "add",
+			RunE: changeConfig(commandWatchDir),
 			Aliases: []string{
 				"a", "i", "n", "init", "new",
 			},
 		}
 		cobraWatcherRem = &cobra.Command{
-			Use: "remove",
-			Run: changeConfig(commandUnwatchDir),
+			Use:  "remove",
+			RunE: changeConfig(commandUnwatchDir),
 			Aliases: []string{
 				"r", "rm", "delete", "del", "d",
 			},
 		}
 		cobraWatcherAddAction = &cobra.Command{
-			Use: "action",
-			Run: changeObject(commandWatcherAddAction),
+			Use:  "action",
+			RunE: changeObject(commandWatcherAddAction),
 			Aliases: []string{
 				"a",
 			},
 		}
 		cobraWatcherRemAction = &cobra.Command{
-			Use: "action",
-			Run: changeObject(commandWatcherRemAction),
+			Use:  "action",
+			RunE: changeObject(commandWatcherRemAction),
 			Aliases: []string{
 				"a",
 			},
@@ -151,8 +155,9 @@ func main() {
 		--------------------
 	*/
 	var cobraConfig = &cobra.Command{
-		Use:   "config",
-		Short: "Manage the configuration file",
+		Use:              "config",
+		Short:            "Manage the configuration file",
+		PersistentPreRun: printLogo,
 		Aliases: []string{
 			"c", "conf",
 		},
@@ -168,7 +173,7 @@ func main() {
 		}
 		cobraConfigLocate = &cobra.Command{
 			Use:    "locate",
-			Run:    changeConfig(commandLocateConfig),
+			RunE:   changeConfig(commandLocateConfig),
 			PreRun: preloadConfig,
 			Aliases: []string{
 				"l", "find", "f",
@@ -176,7 +181,7 @@ func main() {
 		}
 		cobraConfigPrint = &cobra.Command{
 			Use:    "print",
-			Run:    changeConfig(commandPrintConfig),
+			RunE:   changeConfig(commandPrintConfig),
 			PreRun: preloadConfig,
 			Aliases: []string{
 				"p",
@@ -186,49 +191,18 @@ func main() {
 
 	/*
 		---------------
-		Service Command
-		---------------
-	*/
-
-	cobraService.AddCommand(
-		cobraServiceInstall,
-		cobraServiceUninstall,
-		cobraServiceStart,
-		cobraServiceStop,
-		cobraServiceStatus,
-	)
-
-	/*
-		---------------
 		Watcher Command
 		---------------
 	*/
-	cobraWatcher.Flags().FuncP("dir", "d", "The directory to perform the action on.", func(s string) error {
-		absTarget, err := filepath.Abs(s)
-		if err != nil {
-			return err
-		}
-
-		rel, err := filepath.Rel(RUNTIME.CurrentDir, absTarget)
-		if err != nil {
-			// If Rel fails, they are fundamentally incompatible
-			// (example: C:/ vs D:/ on Windows).
-			return fmt.Errorf("Path not in working directory, error: %w", err)
-		}
-
-		relSlash := filepath.ToSlash(rel)
-
-		if relSlash == ".." || strings.HasPrefix(relSlash, "../") {
-			return fmt.Errorf(
-				"Path is outside of the current working directory: %q",
-				relSlash,
-			)
-		}
-
-		RUNTIME.CurrentDir = absTarget
+	cobraWatcher.PersistentFlags().FuncP("dir", "d", "The directory to perform the action on.", func(s string) error {
+		var err = setRuntimeWd(s)
 		colYellow.Printf("Using directory: %q", RUNTIME.CurrentDir)
-		return nil
+		return err
 	})
+	cobraWatcher.PersistentFlags().BoolP(
+		"literal", "l", false,
+		"If set, the directory argument is treated as a literal path and will undergo no transformations.",
+	)
 
 	cobraWatcher.AddCommand(
 		cobraWatcherAdd,
@@ -258,11 +232,28 @@ func main() {
 
 	/*
 		---------------
+		Service Command
+		---------------
+	*/
+	cobraService.AddCommand(
+		cobraServiceInstall,
+		cobraServiceUninstall,
+		cobraServiceStart,
+		cobraServiceRun,
+		cobraServiceStop,
+		cobraServiceStatus,
+	)
+
+	/*
+		---------------
 		Root Command
 		---------------
 	*/
 	root.PersistentFlags().BoolVarP(
 		&RUNTIME.Verbose, "verbose", "v", false, "Enable verbose output",
+	)
+	root.PersistentFlags().BoolVarP(
+		&RUNTIME.NoLogo, "quiet", "q", false, "Stop the logo from printing",
 	)
 
 	root.AddCommand(
@@ -276,4 +267,11 @@ func main() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+}
+
+func printLogo(_ *cobra.Command, _ []string) {
+	if RUNTIME.NoLogo {
+		return
+	}
+	logo.Print()
 }

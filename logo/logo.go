@@ -45,7 +45,7 @@ func Print() {
 	println(
 		FMON_LOGO,
 		fmt.Sprintf(
-			"\n%s",
+			"%s",
 			strings.Repeat("-", len(strings.Split(FMON_LOGO, "\n")[0])-sub), // 10 to account for ansi escape
 		),
 	)

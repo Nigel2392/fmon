@@ -19,11 +19,11 @@ var (
 type (
 	CobraCommandFuncE     = func(*cobra.Command, []string) error
 	CobraCommandFunc      = func(*cobra.Command, []string)
-	FMonCommandFunc       = func(*configure.FilesystemMonitor, *cobra.Command, []string)
-	FMonObjectCommandFunc = func(*configure.FilesystemMonitor, *configure.MonitoredObject, *cobra.Command, []string)
+	FMonCommandFunc       = func(*configure.FilesystemMonitor, *cobra.Command, []string) error
+	FMonObjectCommandFunc = func(*configure.FilesystemMonitor, *configure.MonitoredObject, *cobra.Command, []string) error
 )
 
-func preloadConfig() (*configure.FilesystemMonitor, CobraCommandFunc, func(FMonCommandFunc) CobraCommandFunc) {
+func preloadConfig() (*configure.FilesystemMonitor, CobraCommandFunc, func(FMonCommandFunc) CobraCommandFuncE) {
 	var conf = new(configure.FilesystemMonitor)
 	var preload = func(cmd *cobra.Command, args []string) {
 		config, err := configure.Read()
@@ -35,18 +35,18 @@ func preloadConfig() (*configure.FilesystemMonitor, CobraCommandFunc, func(FMonC
 
 		*conf = *config
 	}
-	var commandWithConf = func(fn FMonCommandFunc) CobraCommandFunc {
-		return func(c *cobra.Command, s []string) {
-			fn(conf, c, s)
+	var commandWithConf = func(fn FMonCommandFunc) CobraCommandFuncE {
+		return func(c *cobra.Command, s []string) error {
+			return fn(conf, c, s)
 		}
 	}
 	return conf, preload, commandWithConf
 }
 
-// func commandChain(fns ...CobraCommandFunc) CobraCommandFunc {
-// 	return func(cmd *cobra.Command, args []string) {
-// 		for _, fn := range fns {
-// 			fn(cmd, args)
-// 		}
-// 	}
-// }
+func commandChain(fns ...CobraCommandFunc) CobraCommandFunc {
+	return func(cmd *cobra.Command, args []string) {
+		for _, fn := range fns {
+			fn(cmd, args)
+		}
+	}
+}

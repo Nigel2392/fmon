@@ -1,7 +1,6 @@
 package ttext
 
 import (
-	"bytes"
 	"embed"
 	"fmt"
 	"strings"
@@ -38,7 +37,7 @@ func fetch(letter string, sub int) string {
 	}
 
 	var asciiNum = int(letter[0]) - sub
-	if asciiNum < 0 || asciiNum > len(letters) {
+	if asciiNum < 0 || asciiNum >= len(letters) {
 		panic("index out of range")
 	}
 
@@ -93,16 +92,21 @@ func Sentence(s string, processLine ...func(maxHeight int, lineNum int, line str
 
 func Concat(letters []string, processLine ...func(maxHeight int, lineNum int, line string) string) string {
 	var (
-		letterM   = make(map[int]int)              // map of letter index -> line length
-		letterL   = make([][]string, len(letters)) // 2d array of letter lines
-		maxHeight int
+		letterM     = make(map[int]int)              // map of letter index -> line length
+		letterL     = make([][]string, len(letters)) // 2d array of letter lines
+		maxHeight   int
+		totalLength int
 	)
 
 	for idx, letter := range letters {
-		var lines = strings.Split(letter, "\n")
-		var maxL = 0
+		var (
+			lines      = strings.Split(letter, "\n")
+			lineLength = 0
+		)
+
 		if len(lines) > 0 {
-			maxL = len(lines[0])
+			lineLength = len(lines[0])
+			totalLength += lineLength
 		}
 
 		var currentH = len(lines)
@@ -110,7 +114,7 @@ func Concat(letters []string, processLine ...func(maxHeight int, lineNum int, li
 			maxHeight = currentH
 		}
 
-		letterM[idx] = maxL
+		letterM[idx] = lineLength
 		letterL[idx] = lines
 	}
 
@@ -119,20 +123,26 @@ func Concat(letters []string, processLine ...func(maxHeight int, lineNum int, li
 			continue
 		}
 
-		var add = strings.Repeat(" ", lineLen)
-		var addS = make([]string, maxHeight-len(letterL[idx]))
-		for addIdx := range len(addS) {
+		var (
+			add  = strings.Repeat(" ", lineLen)
+			addX = maxHeight - len(letterL[idx])
+			addS = make([]string, addX, maxHeight)
+		)
+
+		for addIdx := range addX {
 			addS[addIdx] = add
 		}
 
-		for len(letterL[idx]) < maxHeight {
-			letterL[idx] = append(addS, letterL[idx]...)
-		}
+		letterL[idx] = append(addS, letterL[idx]...)
 	}
 
-	var lineBufs = make([]string, maxHeight)
+	var out = new(strings.Builder)
+	out.Grow(maxHeight*totalLength + maxHeight)
+
+	var buf = new(strings.Builder)
 	for i := 0; i < maxHeight; i++ {
-		var buf = new(bytes.Buffer)
+		buf.Reset()
+		buf.Grow(totalLength)
 		for _, lines := range letterL {
 			buf.WriteString(lines[i])
 		}
@@ -142,8 +152,9 @@ func Concat(letters []string, processLine ...func(maxHeight int, lineNum int, li
 			ln = fn(maxHeight, i, ln)
 		}
 
-		lineBufs[i] = ln
+		out.WriteString(ln)
+		out.WriteByte('\n')
 	}
 
-	return strings.Join(lineBufs, "\n")
+	return out.String()
 }

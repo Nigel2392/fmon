@@ -135,10 +135,16 @@ func Write(to string, config *FilesystemMonitor) error {
 		}
 	}
 
-	err = os.WriteFile(to, data, 0644)
+	f, err := os.OpenFile(to, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
-		return fmt.Errorf("Failed to write config file %s: %w", config.Path, err)
+		return fmt.Errorf("Failed to open file %s for writing: %w", to, err)
 	}
+
+	_, err = f.Write(data)
+	if err != nil {
+		return fmt.Errorf("Failed to write file %s: %w", to, err)
+	}
+
 	return nil
 }
 

@@ -9,7 +9,9 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/Nigel2392/fmon/watcher"
 	"github.com/Nigel2392/fmon/watcher/configure"
+	"github.com/kardianos/service"
 	"github.com/spf13/cobra"
 )
 
@@ -43,27 +45,50 @@ func commandInitConfig(cmd *cobra.Command, args []string) {
 			os.Exit(1)
 		}
 
+		// Create a dud to check service status
+		var svc, err = service.New(
+			watcher.NewWatcher(""),
+			SERVICE_CONFIG,
+		)
+		if err != nil {
+			colRed.Print("Error while creating service object: ")
+			fmt.Println(err)
+			os.Exit(1)
+		}
+
+		status, err := svc.Status()
+		switch {
+		case err == nil, status != service.StatusUnknown:
+			colRed.Println("Service must be uninstalled first.")
+			os.Exit(1)
+		case !errors.Is(err, service.ErrNotInstalled):
+			colRed.Print("Error while retrieving status for service: ")
+			fmt.Println(err)
+			os.Exit(1)
+		}
+
 		var (
 			isUserConfig   = configure.IsUserConfig(existingPath)
 			movingToGlobal = flagGlobal && isUserConfig
 			movingToUser   = !flagGlobal && !isUserConfig
 		)
 		if (movingToGlobal) || (movingToUser) {
-
 			var dir = filepath.Dir(existingPath)
 			if movingToGlobal {
-				colRed.Printf("Deleting old user config directory %q...\n", dir)
+				colRed.Print("Deleting old user config directory... ")
 			} else {
-				colRed.Printf("Deleting old global configuration directory %q...\n", dir)
+				colRed.Print("Deleting old global configuration directory... ")
 			}
+			fmt.Println(dir)
 
 			if err := os.RemoveAll(dir); err != nil {
-				colRed.Println("Failed to remove old config file: ", err)
+				colRed.Print("Failed to remove old config file: ")
+				fmt.Println(err)
 				os.Exit(1)
 			}
 
 			// Reset the existing path so the rewriteConfig function can decide
-			// based on the 'global' parameter.
+			// the new path based on the 'global' parameter.
 			existingPath = ""
 		}
 
@@ -81,12 +106,13 @@ func commandInitConfig(cmd *cobra.Command, args []string) {
 	fmt.Println(example.Path)
 }
 
-func commandLocateConfig(config *configure.FilesystemMonitor, cmd *cobra.Command, args []string) {
+func commandLocateConfig(config *configure.FilesystemMonitor, cmd *cobra.Command, args []string) error {
 	colYellow.Print("Found config: ")
 	fmt.Println(config.Path)
+	return nil
 }
 
-func commandPrintConfig(config *configure.FilesystemMonitor, cmd *cobra.Command, args []string) {
+func commandPrintConfig(config *configure.FilesystemMonitor, cmd *cobra.Command, args []string) error {
 	var buf = new(bytes.Buffer)
 	colBlue.Fprint(buf, "Configuration File: ")
 	fmt.Fprintf(buf, "%s\n", config.Path)
@@ -116,4 +142,5 @@ func commandPrintConfig(config *configure.FilesystemMonitor, cmd *cobra.Command,
 	}
 
 	fmt.Print(buf.String())
+	return nil
 }
