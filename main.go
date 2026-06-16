@@ -23,12 +23,6 @@ var SERVICE_CONFIG = &service.Config{
 }
 
 func main() {
-	var wd, err = os.Getwd()
-	if err != nil {
-		panic("could not retrieve working directory")
-	}
-
-	RUNTIME.CurrentDir = wd
 	configure.Setup(configure.PackageSetup{
 		NameBase: "fmon",
 	})
@@ -105,7 +99,6 @@ func main() {
 		--------------------
 	*/
 	var _, preloadConfig, changeConfig = preloadConfig()
-	var changeObject = preloadObjectFunc(changeConfig)
 	var cobraWatcher = &cobra.Command{
 		Use:   "watcher",
 		Short: "Manage the watcher",
@@ -135,14 +128,14 @@ func main() {
 		}
 		cobraWatcherAddAction = &cobra.Command{
 			Use:  "action",
-			RunE: changeObject(commandWatcherAddAction),
+			RunE: changeConfig(commandWatcherAddAction),
 			Aliases: []string{
 				"a",
 			},
 		}
 		cobraWatcherRemAction = &cobra.Command{
 			Use:  "action",
-			RunE: changeObject(commandWatcherRemAction),
+			RunE: changeConfig(commandWatcherRemAction),
 			Aliases: []string{
 				"a",
 			},
@@ -194,27 +187,36 @@ func main() {
 		Watcher Command
 		---------------
 	*/
-	cobraWatcher.PersistentFlags().FuncP("dir", "d", "The directory to perform the action on.", func(s string) error {
-		var err = setRuntimeWd(s)
-		colYellow.Printf("Using directory: %q", RUNTIME.CurrentDir)
-		return err
-	})
 	cobraWatcher.PersistentFlags().BoolP(
 		"literal", "l", false,
 		"If set, the directory argument is treated as a literal path and will undergo no transformations.",
 	)
 
+	var addFlags = cobraWatcherAddAction.Flags()
+	addFlags.StringP("id", "i", "", "The ID for the action")
+	addFlags.StringP("type", "t", "", "The type for the action")
+	addFlags.Uint64P("size", "s", 0, "The size for the action (in bytes).")
+	addFlags.StringP("action", "a", "", "The action to perform or the path to a js which handles the action.")
+	addFlags.Bool("supervised", false, "Make the action supervised.")
+	cobraWatcherAddAction.MarkFlagRequired("id")
+	cobraWatcherAddAction.MarkFlagRequired("type")
+	cobraWatcherAddAction.MarkFlagRequired("action")
+
+	var remFlags = cobraWatcherRemAction.Flags()
+	remFlags.StringP("id", "i", "", "The ID of the action to remove")
+	cobraWatcherRemAction.MarkFlagRequired("id")
+
 	cobraWatcher.AddCommand(
 		cobraWatcherAdd,
 		cobraWatcherRem,
 	)
+
 	cobraWatcherAdd.AddCommand(
 		cobraWatcherAddAction,
 	)
 	cobraWatcherRem.AddCommand(
 		cobraWatcherRemAction,
 	)
-
 	/*
 		---------------
 		Config Command

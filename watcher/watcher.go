@@ -13,10 +13,21 @@ import (
 
 var _ service.Interface = (*Watcher)(nil)
 
+type watcherActionsMeta struct {
+	path   string
+	obj    *configure.MonitoredObject
+	action *configure.MonitoredObjectAction
+}
+
+type watcherActions struct {
+	m map[configure.ActionType][]*watcherActionsMeta
+}
+
 type Watcher struct {
 	confDir           string
 	watcher           *fsnotify.Watcher
 	config            *configure.FilesystemMonitor
+	confBuilt         *watcherActions
 	currentlyWatching map[string]struct{}
 	done              chan struct{}
 	log               service.Logger
@@ -131,6 +142,10 @@ func (w *Watcher) event(s service.Service, event fsnotify.Event) error {
 		return w.reloadConfig(s)
 	}
 
+	if _, ok := w.currentlyWatching[event.Name]; event.Has(fsnotify.Remove) && ok {
+		delete(w.currentlyWatching, event.Name)
+	}
+
 	if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) {
 
 	}
@@ -142,6 +157,10 @@ func (w *Watcher) event(s service.Service, event fsnotify.Event) error {
 func (w *Watcher) reloadConfig(s service.Service) (err error) {
 	w.config, err = configure.Read()
 	if err != nil {
+		return err
+	}
+
+	if err = w.rebuildConfig(); err != nil {
 		return err
 	}
 
@@ -172,6 +191,32 @@ func (w *Watcher) reloadConfig(s service.Service) (err error) {
 			}
 			w.currentlyWatching[k] = struct{}{}
 			w.log.Infof("Added path %q to watchlist", k)
+		}
+	}
+
+	return nil
+}
+
+func (w *Watcher) rebuildConfig() error {
+	w.confBuilt = &watcherActions{
+		m: make(map[configure.ActionType][]*watcherActionsMeta),
+	}
+
+	for _, action := range configure.ACTION_TYPES {
+		w.confBuilt.m[action] = make([]*watcherActionsMeta, 0)
+	}
+
+	for path, obj := range w.config.Files.Iter() {
+		for _, action := range obj.Actions {
+			var meta = &watcherActionsMeta{
+				path:   path,
+				obj:    obj,
+				action: &action,
+			}
+
+			w.confBuilt.m[action.ActionType] = append(
+				w.confBuilt.m[action.ActionType], meta,
+			)
 		}
 	}
 
