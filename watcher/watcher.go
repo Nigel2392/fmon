@@ -146,7 +146,20 @@ func (w *Watcher) event(s service.Service, event fsnotify.Event) error {
 		delete(w.currentlyWatching, event.Name)
 	}
 
-	if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) {
+	var ops = []fsnotify.Op{
+		fsnotify.Create,
+		fsnotify.Write,
+		fsnotify.Remove,
+		fsnotify.Rename,
+		fsnotify.Chmod,
+	}
+
+	for _, op := range ops {
+		if !event.Has(op) {
+			continue
+		}
+
+		// var objs, ok = w.confBuilt.m[op.String()]
 
 	}
 
