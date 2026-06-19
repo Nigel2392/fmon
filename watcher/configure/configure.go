@@ -151,15 +151,15 @@ func Write(to string, config *FilesystemMonitor) error {
 type ActionType = string
 
 const (
-	MAXSIZE_ACTION ActionType = "maxsize"
-	CREATE_ACTION  ActionType = "create"
-	DELETE_ACTION  ActionType = "delete"
-	RENAME_ACTION  ActionType = "rename"
-	CHANGE_ACTION  ActionType = "change"
+	TICKER_ACTION ActionType = "ticker"
+	CREATE_ACTION ActionType = "create"
+	DELETE_ACTION ActionType = "delete"
+	RENAME_ACTION ActionType = "rename"
+	CHANGE_ACTION ActionType = "change"
 )
 
 var ACTION_TYPES = []ActionType{
-	MAXSIZE_ACTION,
+	TICKER_ACTION,
 	CREATE_ACTION,
 	DELETE_ACTION,
 	RENAME_ACTION,
@@ -170,8 +170,9 @@ type MonitoredObjectAction struct {
 	ID         string     `yaml:"id" json:"id"`
 	ActionType ActionType `yaml:"action_type" json:"action_type"` // maxsize | create | delete | rename | change
 	Size       uint64     `yaml:"size" json:"size"`               // max size in bytes for action
+	Debounce   float64    `yaml:"debounce" json:"debounce"`       // time to wait in seconds for debouncing, min 0.1
 	Action     string     `yaml:"action" json:"action"`           // action or path to javascript file
-	Supervised bool       `yaml:"supervised" json:"supervised"`   // user can decide and see which commands / actions are ran, interactive.
+	// Supervised bool       `yaml:"supervised" json:"supervised"`   // user can decide and see which commands / actions are ran, interactive.
 }
 
 type MonitoredObject struct {

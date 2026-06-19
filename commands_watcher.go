@@ -89,11 +89,12 @@ func commandWatcherAddAction(cnf *configure.FilesystemMonitor, cmd *cobra.Comman
 	}
 
 	var (
-		id         string
-		typ        string
-		size       uint64
-		action     string
-		supervised bool
+		id       string
+		typ      string
+		size     uint64
+		debounce float64
+		action   string
+		// supervised bool
 	)
 
 	if id, err = cmd.Flags().GetString("id"); err != nil {
@@ -105,10 +106,10 @@ func commandWatcherAddAction(cnf *configure.FilesystemMonitor, cmd *cobra.Comman
 	if size, err = cmd.Flags().GetUint64("size"); err != nil {
 		return err
 	}
-	if action, err = cmd.Flags().GetString("action"); err != nil {
+	if debounce, err = cmd.Flags().GetFloat64("debounce"); err != nil {
 		return err
 	}
-	if supervised, err = cmd.Flags().GetBool("supervised"); err != nil {
+	if action, err = cmd.Flags().GetString("action"); err != nil {
 		return err
 	}
 
@@ -136,7 +137,8 @@ func commandWatcherAddAction(cnf *configure.FilesystemMonitor, cmd *cobra.Comman
 		Action:     action,
 		ActionType: action,
 		Size:       size,
-		Supervised: supervised,
+		Debounce:   debounce,
+		// Supervised: supervised,
 	}
 
 	obj.Actions = append(obj.Actions, actionObj)

@@ -31,12 +31,8 @@ func init() {
 	letters = [_letters_size]string(split)
 }
 
-func fetch(letter string, sub int) string {
-	if len(letter) > 1 {
-		panic("How many characters does a single ASCII letter have...")
-	}
-
-	var asciiNum = int(letter[0]) - sub
+func fetch(idx int) string {
+	var asciiNum = idx
 	if asciiNum < 0 || asciiNum >= len(letters) {
 		panic("index out of range")
 	}
@@ -44,26 +40,24 @@ func fetch(letter string, sub int) string {
 	return letters[asciiNum]
 }
 
-func Uppercase(letter string) string {
-	letter = strings.ToUpper(letter)
-	return fetch(letter, 65)
+func Uppercase(c rune) string {
+	return fetch(int(unicode.ToUpper(c)) - 65)
 }
 
-func Lowercase(letter string) string {
-	letter = strings.ToLower(letter)
-	return fetch(letter, (97 - 26))
+func Lowercase(c rune) string {
+	return fetch(int(unicode.ToUpper(c)) - (97 - 26))
 }
 
 func Space() string {
-	return fetch(string(52), 0)
+	return fetch(52)
 }
 
 func Dot() string {
-	return fetch(string(53), 0)
+	return fetch(53)
 }
 
 func Comma() string {
-	return fetch(string(54), 0)
+	return fetch(54)
 }
 
 func Sentence(s string, processLine ...func(maxHeight int, lineNum int, line string) string) string {
@@ -75,9 +69,9 @@ func Sentence(s string, processLine ...func(maxHeight int, lineNum int, line str
 
 		switch {
 		case c >= 'A' && c <= 'Z': // uppercase
-			letters = append(letters, Uppercase(string(c)))
+			letters = append(letters, Uppercase(c))
 		case c >= 'a' && c <= 'z': // lowercase
-			letters = append(letters, Lowercase(string(c)))
+			letters = append(letters, Lowercase(c))
 		case c == '.':
 			letters = append(letters, Dot())
 		case c == ',':

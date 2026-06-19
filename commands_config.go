@@ -22,7 +22,13 @@ func commandInitConfig(cmd *cobra.Command, args []string) {
 
 	example.Files.Set("path/to/watched/directory_or_file", &configure.MonitoredObject{
 		Actions: []configure.MonitoredObjectAction{
-			{},
+			{
+				ID:         "my-unique-action-id",
+				ActionType: configure.CREATE_ACTION,
+				Size:       0,
+				Debounce:   0.1,
+				Action:     "path/to/js/or/shell/file",
+			},
 		},
 	})
 
@@ -125,14 +131,17 @@ func commandPrintConfig(config *configure.FilesystemMonitor, cmd *cobra.Command,
 
 		if RUNTIME.Verbose {
 			for _, action := range v.Actions {
+				// ID
 				// ActionType
 				// Size
+				// Debounce
 				// Action
-				// Supervised
+				// Target
 
+				fmt.Fprintf(buf, "     ID: %s\n", action.ID)
 				fmt.Fprintf(buf, "     action_type: %s\n", action.ActionType)
-				fmt.Fprintf(buf, "     supervised: %t\n", action.Supervised)
 				fmt.Fprintf(buf, "     action: %s\n", action.Action)
+				fmt.Fprintf(buf, "     debounce: %.2f\n", action.Debounce)
 
 				if action.Size > 0 {
 					fmt.Fprintf(buf, "     size: %d\n", action.Size)

@@ -2,7 +2,11 @@ package trie
 
 type trieNode[Segment comparable, Data any] struct {
 	children map[Segment]*trieNode[Segment, Data]
-	data     *Data
+
+	// keep as pointer to data
+	// this might introduce some extra pointer indirection
+	// but saves memory over storing a bool
+	data *Data
 }
 
 type Tree[Segment comparable, Data any] struct {
@@ -60,13 +64,14 @@ func (pt *Tree[Segment, Data]) Find(path []Segment) (Data, bool) {
 	return *new(Data), false
 }
 
-func (pt *Tree[Segment, Data]) Remove(path []Segment) {
-	pt.remove(pt.root, path, 0)
+func (pt *Tree[Segment, Data]) Remove(path []Segment) bool {
+	r, _ := pt.remove(pt.root, path, 0)
+	return r
 }
 
-func (pt *Tree[Segment, Data]) remove(current *trieNode[Segment, Data], path []Segment, index int) bool {
+func (pt *Tree[Segment, Data]) remove(current *trieNode[Segment, Data], path []Segment, index int) (removed bool, removeParent bool) {
 	if current == nil {
-		return false
+		return false, false
 	}
 
 	// we have reached target node
@@ -74,25 +79,25 @@ func (pt *Tree[Segment, Data]) remove(current *trieNode[Segment, Data], path []S
 		current.data = nil
 
 		// when no children are left, let the parent prune it.
-		return len(current.children) == 0
+		return true, len(current.children) == 0
 	}
 
 	segment := path[index]
 	child, exists := current.children[segment]
 	if !exists {
-		return false
+		return false, false
 	}
 
 	// remove nodes bottom up.
 	// if true, the child holds no other references
 	// and can be deleted.
-	if pt.remove(child, path, index+1) {
+	if removed, delParent := pt.remove(child, path, index+1); delParent {
 		delete(current.children, segment)
 
 		// parent of *this* node can prune *this* node
 		// when no data or children are present.
-		return current.data == nil && len(current.children) == 0
+		return removed, current.data == nil && len(current.children) == 0
 	}
 
-	return false
+	return false, false
 }

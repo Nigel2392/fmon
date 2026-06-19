@@ -11,33 +11,37 @@ import (
 	"github.com/kardianos/service"
 )
 
-var _ service.Interface = (*Watcher)(nil)
+var (
+	_      service.Interface = (*Watcher)(nil)
+	opsMap                   = map[fsnotify.Op]configure.ActionType{
+		// fsnotify.Write:  ,
+		fsnotify.Create: configure.CREATE_ACTION,
+		fsnotify.Remove: configure.DELETE_ACTION,
+		fsnotify.Rename: configure.RENAME_ACTION,
+		fsnotify.Chmod:  configure.CHANGE_ACTION,
+	}
+)
 
-type watcherActionsMeta struct {
-	path   string
-	obj    *configure.MonitoredObject
+type payload struct {
+	obj    *WatchedNode
 	action *configure.MonitoredObjectAction
-}
-
-type watcherActions struct {
-	m map[configure.ActionType][]*watcherActionsMeta
+	event  fsnotify.Event
 }
 
 type Watcher struct {
 	confDir           string
 	watcher           *fsnotify.Watcher
 	config            *configure.FilesystemMonitor
-	confBuilt         *watcherActions
-	currentlyWatching map[string]struct{}
+	currentlyWatching *WatchTree
 	done              chan struct{}
+	queue             chan payload
 	log               service.Logger
 }
 
 func NewWatcher(confDir string) *Watcher {
 	return &Watcher{
-		confDir:           confDir,
-		currentlyWatching: make(map[string]struct{}),
-		done:              make(chan struct{}),
+		confDir: confDir,
+		done:    make(chan struct{}),
 	}
 }
 
@@ -68,6 +72,7 @@ func (w *Watcher) Start(s service.Service) error {
 
 	w.log = l
 	w.done = make(chan struct{})
+	w.queue = make(chan payload)
 
 	if service.Interactive() {
 		w.log.Infof("Running in DEBUG / INTERACTIVE mode. Press Ctrl+C to stop.")
@@ -80,6 +85,7 @@ func (w *Watcher) Start(s service.Service) error {
 	}
 
 	go w.watch(s)
+	go w.work(s)
 	return nil
 }
 
@@ -91,11 +97,15 @@ func (w *Watcher) Stop(s service.Service) error {
 		close(w.done)
 	}
 
+	if w.queue != nil {
+		close(w.queue)
+	}
+
 	if err := w.watcher.Close(); err != nil {
 		return err
 	}
 	w.watcher = nil
-	w.currentlyWatching = make(map[string]struct{})
+	w.currentlyWatching = nil
 	return nil
 }
 
@@ -133,6 +143,33 @@ func (w *Watcher) watch(s service.Service) {
 	}
 }
 
+// work executes actions in a separate goroutine. It is started by the watcher.
+func (w *Watcher) work(s service.Service) {
+
+	// todo: spin up js engine if any actions specify a js file
+
+	for {
+		// try to keep indentation at a minimum.
+		var (
+			p  payload
+			ok bool
+		)
+
+		select {
+		case p, ok = <-w.queue:
+		case <-w.done:
+			// Stop was called, break out.
+			return
+		}
+
+		if !ok {
+			// queue channel closed
+			return
+		}
+
+	}
+}
+
 // Handle events from watched directories/files.
 func (w *Watcher) event(s service.Service, event fsnotify.Event) error {
 
@@ -142,25 +179,38 @@ func (w *Watcher) event(s service.Service, event fsnotify.Event) error {
 		return w.reloadConfig(s)
 	}
 
-	if _, ok := w.currentlyWatching[event.Name]; event.Has(fsnotify.Remove) && ok {
-		delete(w.currentlyWatching, event.Name)
-	}
+	for fsnotifyOp, configureAction := range opsMap {
 
-	var ops = []fsnotify.Op{
-		fsnotify.Create,
-		fsnotify.Write,
-		fsnotify.Remove,
-		fsnotify.Rename,
-		fsnotify.Chmod,
-	}
-
-	for _, op := range ops {
-		if !event.Has(op) {
-			continue
+		if !event.Has(fsnotifyOp) {
+			continue // This operation wasn't monitored, continue...
 		}
 
-		// var objs, ok = w.confBuilt.m[op.String()]
+		watched, ok := w.currentlyWatching.Find(event.Name)
+		if !ok {
+			continue // No paths exist for this operation, continue...
+		}
 
+		for _, action := range watched.Actions[configureAction] {
+			var debounceObj, ok = watched.Debounce[action.ID]
+			if !ok {
+				w.log.Warningf("Debounce action not found for action %q in %q", action.ID, event.String())
+				continue
+			}
+
+			debounceObj(func() {
+				w.queue <- payload{
+					obj:    watched,
+					event:  event,
+					action: action,
+				}
+			})
+		}
+	}
+
+	if _, ok := w.currentlyWatching.Find(event.Name); event.Has(fsnotify.Remove) && ok {
+		if !w.currentlyWatching.Remove(event.Name) {
+			w.log.Warningf("Failed to remove path %q from memory watchlist", event.Name)
+		}
 	}
 
 	return nil
@@ -173,63 +223,39 @@ func (w *Watcher) reloadConfig(s service.Service) (err error) {
 		return err
 	}
 
-	if err = w.rebuildConfig(); err != nil {
-		return err
-	}
-
 	w.log.Infof("Initialized configuration file: %q", w.config.Path)
 
 	if w.currentlyWatching == nil {
-		w.currentlyWatching = make(map[string]struct{})
+		w.currentlyWatching = NewWatchTree(w)
 	}
 
 	// Remove files that are no longer in the configuration file.
-	for k := range w.currentlyWatching {
+	for _, k := range w.currentlyWatching.Keys() {
 		if _, ok := w.config.Files.Get(k); !ok && w.confDir != "" {
 			if err = w.watcher.Remove(k); err != nil && err != fsnotify.ErrNonExistentWatch {
 				w.log.Errorf("Failed to remove path %q from watchlist: %v", k, err)
 			}
+
+			if !w.currentlyWatching.Remove(k) {
+				w.log.Errorf("Failed to remove path %q from memory watchlist", k)
+				continue
+			}
+
 			w.log.Infof("Removed path %q from watchlist", k)
-			delete(w.currentlyWatching, k)
 		}
 	}
 
 	// Watch new files that are in the configuration file but were not present before.
-	for _, k := range w.config.Files.Keys() {
-		if _, ok := w.currentlyWatching[k]; !ok && w.confDir != "" {
+	for k, obj := range w.config.Files.Iterator() {
+		if _, ok := w.currentlyWatching.Find(k); !ok && w.confDir != "" {
 			err = w.watcher.Add(k)
 			if err != nil {
 				w.log.Errorf("Failed to add path %q to watchlist: %v", k, err)
 				continue
 			}
-			w.currentlyWatching[k] = struct{}{}
+
+			w.currentlyWatching.Add(k, obj)
 			w.log.Infof("Added path %q to watchlist", k)
-		}
-	}
-
-	return nil
-}
-
-func (w *Watcher) rebuildConfig() error {
-	w.confBuilt = &watcherActions{
-		m: make(map[configure.ActionType][]*watcherActionsMeta),
-	}
-
-	for _, action := range configure.ACTION_TYPES {
-		w.confBuilt.m[action] = make([]*watcherActionsMeta, 0)
-	}
-
-	for path, obj := range w.config.Files.Iter() {
-		for _, action := range obj.Actions {
-			var meta = &watcherActionsMeta{
-				path:   path,
-				obj:    obj,
-				action: &action,
-			}
-
-			w.confBuilt.m[action.ActionType] = append(
-				w.confBuilt.m[action.ActionType], meta,
-			)
 		}
 	}
 
