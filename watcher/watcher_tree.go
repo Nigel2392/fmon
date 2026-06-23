@@ -10,6 +10,7 @@ import (
 	"github.com/Nigel2392/fmon/watcher/configure"
 	"github.com/bep/debounce"
 	"github.com/elliotchance/orderedmap/v2"
+	"github.com/robfig/cron/v3"
 )
 
 type WatchedNode struct {
@@ -19,6 +20,7 @@ type WatchedNode struct {
 	Debounce map[string]func(f func()) // map of action ID to debounce func
 	compiled map[string]func(p *payload)
 	subDirs  map[string]struct{}
+	cronList map[string]cron.EntryID //action id -> cron id
 }
 
 type WatchTree struct {
@@ -55,6 +57,7 @@ func (w *WatchTree) Add(path string, obj *configure.MonitoredObject) *WatchedNod
 		Debounce: make(map[string]func(f func())),
 		compiled: make(map[string]func(p *payload)),
 		subDirs:  make(map[string]struct{}),
+		cronList: make(map[string]cron.EntryID),
 	}
 
 	for _, action := range obj.Actions {

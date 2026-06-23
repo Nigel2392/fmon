@@ -5,18 +5,18 @@ go 1.26.3
 require (
 	github.com/Nigel2392/go-django/pkg/yml v0.0.0-20260508102948-b62602803c3c
 	github.com/bep/debounce v1.2.1
+	github.com/dop251/goja v0.0.0-20260618133527-c9b2ea77db59
 	github.com/elliotchance/orderedmap/v2 v2.7.0
 	github.com/fatih/color v1.19.0
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/kardianos/service v1.2.4
-	github.com/robfig/cron v1.2.0
+	github.com/robfig/cron/v3 v3.0.1
 	github.com/spf13/cobra v1.10.2
 	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
 	github.com/dlclark/regexp2/v2 v2.2.1 // indirect
-	github.com/dop251/goja v0.0.0-20260618133527-c9b2ea77db59 // indirect
 	github.com/go-sourcemap/sourcemap v2.1.3+incompatible // indirect
 	github.com/google/pprof v0.0.0-20230207041349-798e818bf904 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect

@@ -8,12 +8,13 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/Nigel2392/fmon/watcher/configure"
 	"github.com/dop251/goja"
 	"github.com/fsnotify/fsnotify"
 	"github.com/kardianos/service"
-	"github.com/robfig/cron"
+	"github.com/robfig/cron/v3"
 )
 
 var (
@@ -58,6 +59,7 @@ type Watcher struct {
 	queue     chan payload
 	log       service.Logger
 	cron      *cron.Cron
+	mu        sync.RWMutex
 }
 
 func NewWatcher(confDir string) *Watcher {
@@ -366,6 +368,9 @@ func (w *Watcher) event(s service.Service, event fsnotify.Event) error {
 		w.log.Infof("event: %s", event.String())
 	}
 
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+
 	watched, ok := w.nodes.Find(event.Name)
 	if ok && event.Has(fsnotify.Create) && watched.Object.Recursive {
 		info, err := os.Stat(event.Name)
@@ -422,6 +427,9 @@ func (w *Watcher) event(s service.Service, event fsnotify.Event) error {
 
 // Load the config into the service memory.
 func (w *Watcher) reloadConfig(s service.Service) (err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
 	w.config, err = configure.Read()
 	if err != nil {
 		return err
@@ -432,10 +440,6 @@ func (w *Watcher) reloadConfig(s service.Service) (err error) {
 	if w.nodes == nil {
 		w.nodes = NewWatchTree(w)
 	}
-
-	// cron jobs need to be re-initialized every time
-	w.cron.Stop()
-	w.cron = cron.New()
 
 	// Remove files that are no longer in the configuration file.
 	for _, k := range w.nodes.Keys() {
@@ -458,6 +462,11 @@ func (w *Watcher) reloadConfig(s service.Service) (err error) {
 				}
 			}
 
+			// stop all cronjobs
+			for _, entryId := range node.cronList {
+				w.cron.Remove(entryId)
+			}
+
 			// delete the node from the tree
 			if !w.nodes.Remove(k) {
 				w.log.Errorf("Failed to remove path %q from memory watchlist", k)
@@ -473,6 +482,7 @@ func (w *Watcher) reloadConfig(s service.Service) (err error) {
 		k = filepath.ToSlash(k)
 
 		var existingSubDirs = make(map[string]struct{})
+		var existingCronList = make(map[string]cron.EntryID)
 		node, ok := w.nodes.Find(k)
 		if !ok { // add to watcher, add new node object
 			err = w.watcher.Add(k)
@@ -500,21 +510,31 @@ func (w *Watcher) reloadConfig(s service.Service) (err error) {
 			w.log.Infof("Added path %q to watchlist", k)
 		} else {
 			existingSubDirs = node.subDirs
+			existingCronList = node.cronList
 		}
 
 		// always update the node to make sure debounce and runtimes match the fresh config
 		node = w.nodes.Add(k, obj)
 		node.subDirs = existingSubDirs
+		node.cronList = existingCronList
 
 		for _, action := range obj.Actions {
 			if action.Cron == "" {
 				continue
 			}
 
-			if err := w.cron.AddJob(action.Cron, &watchCron{w, node, action}); err != nil {
+			if entryId, ok := node.cronList[action.ID]; ok {
+				w.cron.Remove(entryId) // remove old entry
+				delete(node.cronList, action.ID)
+			}
+
+			var entry cron.EntryID
+			if entry, err = w.cron.AddJob(action.Cron, &watchCron{w, node, action}); err != nil {
 				w.log.Errorf("Failed to add cron job for path %q: %v", k, err)
 				continue
 			}
+
+			node.cronList[action.ID] = entry
 		}
 	}
 

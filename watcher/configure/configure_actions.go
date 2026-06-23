@@ -26,7 +26,7 @@ type MonitoredObjectAction struct {
 	Size       uint64     `yaml:"size" json:"size"`               // max size in bytes for action
 	Debounce   float64    `yaml:"debounce" json:"debounce"`       // time to wait in seconds for debouncing, min 0.1
 	Action     string     `yaml:"action" json:"action"`           // path to shell or javascript file
-	Cron       string     `yaml:"cronjob" json:"cronjob"`         // schedule for cronjob, ref github.com/robfig/cron
+	Cron       string     `yaml:"cronjob" json:"cronjob"`         // schedule for cronjob, ref github.com/robfig/cron/v3
 	// Supervised bool       `yaml:"supervised" json:"supervised"`   // user can decide and see which commands / actions are ran, interactive.
 }
 
