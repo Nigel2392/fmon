@@ -21,7 +21,7 @@ func TestNewWatchTree(t *testing.T) {
 
 func TestAddAndFind(t *testing.T) {
 	wt := watcher.NewWatchTree(watcher.NewWatcher(""))
-	obj := &configure.MonitoredObject{}
+	obj := &configure.MonitoredObject{Recursive: true}
 
 	wt.Add("/a/b/c", obj)
 
@@ -55,6 +55,25 @@ func TestAddAndFind(t *testing.T) {
 	_, ok = wt.Find("/")
 	if ok {
 		t.Log("Find('/') returned true – root data found")
+	}
+}
+
+func TestOverrideAddAndFind(t *testing.T) {
+	wt := watcher.NewWatchTree(watcher.NewWatcher(""))
+	obj := &configure.MonitoredObject{Recursive: true}
+
+	wt.Add("/a/b/c", obj)
+
+	obj2 := &configure.MonitoredObject{Recursive: false}
+	wt.Add("/a/b/c", obj2)
+
+	// Exact match
+	found, ok := wt.Find("/a/b/c")
+	if !ok {
+		t.Fatal("expected to find node")
+	}
+	if found.Object == obj || found.Object != obj2 {
+		t.Error("found object does not match")
 	}
 }
 

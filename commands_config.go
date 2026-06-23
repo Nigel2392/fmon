@@ -19,7 +19,6 @@ func commandInitConfig(cmd *cobra.Command, args []string) {
 	var flagGlobal = cmd.Flag("global").Changed
 
 	var example = configure.NewMonitorConfig("yaml", "")
-
 	example.Files.Set("path/to/watched/directory_or_file", &configure.MonitoredObject{
 		Actions: []configure.MonitoredObjectAction{
 			{
@@ -71,6 +70,8 @@ func commandInitConfig(cmd *cobra.Command, args []string) {
 			colRed.Print("Error while retrieving status for service: ")
 			fmt.Println(err)
 			os.Exit(1)
+		default:
+			colBlue.Println("Service not installed...")
 		}
 
 		var (
@@ -142,6 +143,10 @@ func commandPrintConfig(config *configure.FilesystemMonitor, cmd *cobra.Command,
 				fmt.Fprintf(buf, "     action_type: %s\n", action.ActionType)
 				fmt.Fprintf(buf, "     action: %s\n", action.Action)
 				fmt.Fprintf(buf, "     debounce: %.2f\n", action.Debounce)
+
+				if action.Cron != "" {
+					fmt.Fprintf(buf, "     cron: %s\n", action.Cron)
+				}
 
 				if action.Size > 0 {
 					fmt.Fprintf(buf, "     size: %d\n", action.Size)

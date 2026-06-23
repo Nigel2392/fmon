@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -39,12 +40,22 @@ func commandWatchDir(cnf *configure.FilesystemMonitor, cmd *cobra.Command, args 
 		return err
 	}
 
-	_, ok := cnf.Files.Get(dir)
-	if ok {
-		return fmt.Errorf("Directory %q is already monitored.", dir)
+	rec, err := cmd.Flags().GetBool("recursive")
+	if err != nil {
+		return err
 	}
 
-	cnf.Files.Set(dir, &configure.MonitoredObject{})
+	obj, ok := cnf.Files.Get(dir)
+	if ok {
+		if obj.Recursive == rec {
+			return errors.New("Object was already monitored and no changes were made.")
+		}
+
+		obj.Recursive = rec
+	} else {
+		cnf.Files.Set(dir, &configure.MonitoredObject{Recursive: rec})
+	}
+
 	err = configure.Write(cnf.Path, cnf)
 	if err != nil {
 		return err
@@ -94,6 +105,7 @@ func commandWatcherAddAction(cnf *configure.FilesystemMonitor, cmd *cobra.Comman
 		size     uint64
 		debounce float64
 		action   string
+		cron     string
 		// supervised bool
 	)
 
@@ -110,6 +122,9 @@ func commandWatcherAddAction(cnf *configure.FilesystemMonitor, cmd *cobra.Comman
 		return err
 	}
 	if action, err = cmd.Flags().GetString("action"); err != nil {
+		return err
+	}
+	if cron, err = cmd.Flags().GetString("cron"); err != nil {
 		return err
 	}
 
@@ -132,12 +147,18 @@ func commandWatcherAddAction(cnf *configure.FilesystemMonitor, cmd *cobra.Comman
 		return fmt.Errorf("action must be one of %s", strings.Join(configure.ACTION_TYPES, ", "))
 	}
 
+	newActionPath, err := configure.SaveActionFile(dir, action)
+	if err != nil {
+		return fmt.Errorf("Failed to copy action file to destination: %w", err)
+	}
+
 	var actionObj = configure.MonitoredObjectAction{
 		ID:         id,
-		Action:     action,
-		ActionType: action,
+		ActionType: typ,
+		Action:     newActionPath,
 		Size:       size,
 		Debounce:   debounce,
+		Cron:       cron,
 		// Supervised: supervised,
 	}
 
@@ -173,6 +194,7 @@ func commandWatcherRemAction(cnf *configure.FilesystemMonitor, cmd *cobra.Comman
 		return fmt.Errorf("Directory %q has no actions.", dir)
 	}
 
+	var action configure.MonitoredObjectAction
 	var newActions = make([]configure.MonitoredObjectAction, len(obj.Actions)-1)
 	for _, action := range obj.Actions {
 		if action.ID == actionId {
@@ -186,6 +208,10 @@ func commandWatcherRemAction(cnf *configure.FilesystemMonitor, cmd *cobra.Comman
 	}
 
 	obj.Actions = newActions
+
+	if err = configure.DeleteActionFile(action); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
 
 	err = configure.Write(cnf.Path, cnf)
 	if err != nil {

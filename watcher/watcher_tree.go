@@ -17,6 +17,8 @@ type WatchedNode struct {
 	Object   *configure.MonitoredObject
 	Actions  map[configure.ActionType][]*configure.MonitoredObjectAction
 	Debounce map[string]func(f func()) // map of action ID to debounce func
+	compiled map[string]func(p *payload)
+	subDirs  map[string]struct{}
 }
 
 type WatchTree struct {
@@ -39,7 +41,7 @@ func (w *WatchTree) Keys() []string {
 	return w.keys.Keys()
 }
 
-func (w *WatchTree) Add(path string, obj *configure.MonitoredObject) {
+func (w *WatchTree) Add(path string, obj *configure.MonitoredObject) *WatchedNode {
 	path = filepath.ToSlash(path)
 	parts := strings.Split(path, "/")
 
@@ -51,6 +53,8 @@ func (w *WatchTree) Add(path string, obj *configure.MonitoredObject) {
 		Object:   obj,
 		Actions:  make(map[configure.ActionType][]*configure.MonitoredObjectAction),
 		Debounce: make(map[string]func(f func())),
+		compiled: make(map[string]func(p *payload)),
+		subDirs:  make(map[string]struct{}),
 	}
 
 	for _, action := range obj.Actions {
@@ -67,6 +71,10 @@ func (w *WatchTree) Add(path string, obj *configure.MonitoredObject) {
 			continue
 		}
 
+		if action.Cron != "" {
+			continue
+		}
+
 		watched.Debounce[action.ID] = debounce.New(
 			time.Duration(action.Debounce * float64(time.Second)),
 		)
@@ -74,14 +82,15 @@ func (w *WatchTree) Add(path string, obj *configure.MonitoredObject) {
 
 	w.Tree.Add(parts, watched)
 	w.keys.Set(path, struct{}{})
+	return watched
 }
 
 func (w *WatchTree) Find(path string) (*WatchedNode, bool) {
 	path = filepath.ToSlash(path)
 	parts := strings.Split(path, "/")
 
-	w.mu.Lock()
-	defer w.mu.Unlock()
+	w.mu.RLock()
+	defer w.mu.RUnlock()
 
 	return w.Tree.Find(parts)
 }

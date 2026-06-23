@@ -45,7 +45,7 @@ func Uppercase(c rune) string {
 }
 
 func Lowercase(c rune) string {
-	return fetch(int(unicode.ToUpper(c)) - (97 - 26))
+	return fetch(int(unicode.ToLower(c)) - (97 - 26))
 }
 
 func Space() string {

@@ -192,16 +192,17 @@ func main() {
 		"If set, the directory argument is treated as a literal path and will undergo no transformations.",
 	)
 
-	var addFlags = cobraWatcherAddAction.Flags()
-	addFlags.StringP("id", "i", "", "The ID for the action")
-	addFlags.StringP("type", "t", "", "The type for the action")
-	addFlags.Uint64P("size", "s", 0, "The size for the action (in bytes).")
-	addFlags.Float64P("debounce", "d", 0.1, "The debounce time in seconds (0.1 is minimum)")
-	addFlags.StringP("action", "a", "", "The action to perform or the path to a js which handles the action.")
-	addFlags.StringP("target", "x", "", "The file to perform an action on")
-	// addFlags.Bool("supervised", false, "Make the action supervised.")
+	cobraWatcherAdd.Flags().BoolP("recursive", "r", false, "Wether to watch directories recursively.")
+
+	var addActFlags = cobraWatcherAddAction.Flags()
+	addActFlags.StringP("id", "i", "", "The ID for the action")
+	addActFlags.StringP("type", "t", "", "The type for the action")
+	addActFlags.Uint64P("size", "s", 0, "The size for the action (in bytes).")
+	addActFlags.Float64P("debounce", "d", 0.1, "The debounce time in seconds (0.1 is minimum)")
+	addActFlags.StringP("action", "a", "", "The action to perform or the path to a js which handles the action.")
+	addActFlags.StringP("cron", "c", "", "The cron schedule to use for theis action")
+	// addActFlags.Bool("supervised", false, "Make the action supervised.")
 	cobraWatcherAddAction.MarkFlagRequired("id")
-	cobraWatcherAddAction.MarkFlagRequired("type")
 	cobraWatcherAddAction.MarkFlagRequired("action")
 
 	var remFlags = cobraWatcherRemAction.Flags()

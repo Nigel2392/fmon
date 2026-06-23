@@ -7,9 +7,15 @@ import (
 	"path/filepath"
 	"strings"
 
+	_ "embed"
+
 	"github.com/Nigel2392/go-django/pkg/yml"
 	"github.com/elliotchance/orderedmap/v2"
+	"gopkg.in/yaml.v3"
 )
+
+//go:embed header.comment
+var yaml_header []byte
 
 func IsUserConfig(path string) bool {
 	for _, v := range SETUP.BuiltUserPaths() {
@@ -140,6 +146,11 @@ func Write(to string, config *FilesystemMonitor) error {
 		return fmt.Errorf("Failed to open file %s for writing: %w", to, err)
 	}
 
+	_, err = f.Write(yaml_header)
+	if err != nil {
+		return fmt.Errorf("Failed to write file %s: %w", to, err)
+	}
+
 	_, err = f.Write(data)
 	if err != nil {
 		return fmt.Errorf("Failed to write file %s: %w", to, err)
@@ -166,23 +177,10 @@ var ACTION_TYPES = []ActionType{
 	CHANGE_ACTION,
 }
 
-type MonitoredObjectAction struct {
-	ID         string     `yaml:"id" json:"id"`
-	ActionType ActionType `yaml:"action_type" json:"action_type"` // maxsize | create | delete | rename | change
-	Size       uint64     `yaml:"size" json:"size"`               // max size in bytes for action
-	Debounce   float64    `yaml:"debounce" json:"debounce"`       // time to wait in seconds for debouncing, min 0.1
-	Action     string     `yaml:"action" json:"action"`           // action or path to javascript file
-	// Supervised bool       `yaml:"supervised" json:"supervised"`   // user can decide and see which commands / actions are ran, interactive.
-}
-
-type MonitoredObject struct {
-	Actions []MonitoredObjectAction `yaml:"actions" json:"actions"`
-}
-
 type FilesystemMonitor struct {
 	Type  string                                    `yaml:"-" json:"-"`
 	Path  string                                    `yaml:"-" json:"-"`
-	Files *yml.OrderedMap[string, *MonitoredObject] `yaml:"files" json:"files"`
+	Files *yml.OrderedMap[string, *MonitoredObject] `yaml:",inline" json:"files"`
 }
 
 func NewMonitorConfig(typ, path string) *FilesystemMonitor {
@@ -193,4 +191,35 @@ func NewMonitorConfig(typ, path string) *FilesystemMonitor {
 			OrderedMap: orderedmap.NewOrderedMap[string, *MonitoredObject](),
 		},
 	}
+}
+
+func (f *FilesystemMonitor) MarshalYAML() (interface{}, error) {
+	var root = &yaml.Node{
+		Kind:    yaml.MappingNode,
+		Tag:     "!!map",
+		Content: make([]*yaml.Node, f.Files.Len()*2),
+	}
+
+	var idx = 0
+	for head := f.Files.Front(); head != nil; head = head.Next() {
+		var (
+			keyNode = new(yaml.Node)
+			valNode = new(yaml.Node)
+		)
+
+		if err := keyNode.Encode(head.Key); err != nil {
+			return nil, fmt.Errorf("error marshaling key %v: %w", head.Key, err)
+		}
+
+		if err := valNode.Encode(head.Value); err != nil {
+			return nil, fmt.Errorf("error marshaling key %v: %w", head.Key, err)
+		}
+
+		root.Content[idx] = keyNode
+		root.Content[idx+1] = valNode
+
+		idx += 2
+	}
+
+	return root, nil
 }
